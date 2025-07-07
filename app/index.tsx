@@ -8,36 +8,50 @@ import { Image, Pressable, ScrollView, Text, View } from "react-native";
 
 export async function initGoogleAPI() {
   return new Promise<void>((resolve, reject) => {
-    if (typeof window === 'undefined') {
+    if (typeof window === "undefined") {
       reject("Not a web environment");
       return;
     }
 
     if (window.gapi) {
-      window.gapi.load('client:auth2', () => {
-        window.gapi.client.init({
-          apiKey: 'AIzaSyCCo-O1817jwJksJdH3BEykZimIS1oadrQ',
-          clientId: '322726300328-f19221mrnhnpv0800ihstchp7kkf0vhj.apps.googleusercontent.com',
-          discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
-          scope: 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.file',
-        }).then(() => {
+      window.gapi.load("client:auth2", async () => {
+        try {
+          await window.gapi.client.init({
+            apiKey: "AIzaSyCCo-O1817jwJksJdH3BEykZimIS1oadrQ",
+            clientId: "322726300328-f19221mrnhnpv0800ihstchp7kkf0vhj.apps.googleusercontent.com",
+            discoveryDocs: [
+              "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest",
+            ],
+            scope:
+              "https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.file",
+          });
+
           resolve();
-        }, reject);
+        } catch (e) {
+          reject(e);
+        }
       });
     } else {
-      const script = document.createElement('script');
-      script.src = 'https://apis.google.com/js/api.js';
+      const script = document.createElement("script");
+      script.src = "https://apis.google.com/js/api.js";
       script.async = true;
       script.onload = () => {
-        window.gapi.load('client:auth2', () => {
-          window.gapi.client.init({
-            apiKey: 'AIzaSyCCo-O1817jwJksJdH3BEykZimIS1oadrQ',
-            clientId: '322726300328-f19221mrnhnpv0800ihstchp7kkf0vhj.apps.googleusercontent.com',
-            discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
-            scope: 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.file',
-          }).then(() => {
+        window.gapi.load("client:auth2", async () => {
+          try {
+            await window.gapi.client.init({
+              apiKey: "AIzaSyCCo-O1817jwJksJdH3BEykZimIS1oadrQ",
+              clientId:
+                "322726300328-f19221mrnhnpv0800ihstchp7kkf0vhj.apps.googleusercontent.com",
+              discoveryDocs: [
+                "https://www.googleapis.com/discovery/v1/apis/drive/v3/rest",
+              ],
+              scope:
+                "https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.file",
+            });
             resolve();
-          }, reject);
+          } catch (e) {
+            reject(e);
+          }
         });
       };
       script.onerror = reject;
@@ -47,72 +61,101 @@ export async function initGoogleAPI() {
 }
 
 
-
 export default function Index() {
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loginError, setLoginError] = useState(false);
   const [books, setBooks] = useState<any[]>([]);
   const root = FileSystem.documentDirectory + "books/";
 
   async function loadBooks() {
-  try {
-    const files = await listBooks();
+    try {
+      const files = await listBooks();
 
-    const books: any[] = [];
+      const books: any[] = [];
 
-    for (const bookFile of files) {
-      if (!bookFile.name.endsWith(".uybook")) continue;
+      for (const bookFile of files) {
+        if (!bookFile.name.endsWith(".uybook")) continue;
 
-      const baseName = bookFile.name.replace(".uybook", "");
-      const coverFile = files.find((f: { name: string; }) => f.name === `${baseName}_cover.jpg`);
-      const content = await downloadFile(bookFile.id);
-      const parsed = parseBookFile(content);
+        const baseName = bookFile.name.replace(".uybook", "");
+        const coverFile = files.find((f: { name: string; }) => f.name === `${baseName}_cover.jpg`);
+        const content = await downloadFile(bookFile.id);
+        const parsed = parseBookFile(content);
 
-      const coverData = coverFile
-        ? `data:image/jpeg;base64,${btoa(await downloadFile(coverFile.id))}`
-        : null;
+        const coverData = coverFile
+          ? `data:image/jpeg;base64,${btoa(await downloadFile(coverFile.id))}`
+          : null;
 
-      books.push({
-        name: bookFile.name,
-        meta: parsed.meta,
-        html: parsed.html,
-        cover: coverData,
-      });
+        books.push({
+          name: bookFile.name,
+          meta: parsed.meta,
+          html: parsed.html,
+          cover: coverData,
+        });
+      }
+
+      setBooks(books);
+    } catch (e) {
+      console.error("Drive error", e);
     }
-
-    setBooks(books);
-  } catch (e) {
-    console.error("Drive error", e);
   }
-}
 
   useEffect(() => {
-    async function initAndLoadBooks() {
+    async function init() {
       try {
-        await initGoogleAPI(); // ✅ attendre que gapi soit prêt
-        await loadBooks();     // ✅ ensuite on peut lire les livres
+        await initGoogleAPI();
+        const auth = window.gapi.auth2.getAuthInstance();
+
+        if (!auth.isSignedIn.get()) {
+          setLoggedIn(false);
+        } else {
+          setLoggedIn(true);
+          await loadBooks();
+        }
       } catch (err) {
         console.error("Erreur d'init GAPI:", err);
+      } finally {
+        setLoading(false);
       }
     }
 
-    initAndLoadBooks();
+    init();
   }, []);
 
-
-  async function deleteAllBooks() {
+  async function handleSignIn() {
+    const auth = window.gapi.auth2.getAuthInstance();
+    setLoginError(false);
     try {
-      const dirInfo = await FileSystem.getInfoAsync(root);
-      if (dirInfo.exists) {
-        await FileSystem.deleteAsync(root, { idempotent: true });
-        await FileSystem.makeDirectoryAsync(root, { intermediates: true });
-      }
-      setBooks([]);
+      await auth.signIn();
+      setLoggedIn(true);
+      await loadBooks();
     } catch (e) {
-      console.error("Error deleting:", e);
+      console.error("Login failed", e);
+      setLoginError(true);
     }
   }
 
   return (
     <View style={styles.container}>
+      {!loggedIn && !loading && (
+        <>
+          <Pressable style={[styles.button, { marginTop: 40 }]} onPress={handleSignIn}>
+            <Text style={styles.buttonText}>🔐 Sign in with Google</Text>
+          </Pressable>
+
+          {loginError && (
+            <View style={{ marginTop: 20, paddingHorizontal: 20 }}>
+              <Text style={{ color: "red", textAlign: "center", marginBottom: 10 }}>
+                ⚠️ La connexion a échoué, veuillez réessayer.
+              </Text>
+              <Pressable style={[styles.button, { backgroundColor: "#f44336" }]} onPress={handleSignIn}>
+                <Text style={styles.buttonText}>Réessayer</Text>
+              </Pressable>
+            </View>
+          )}
+        </>
+      )}
+
       <Text style={styles.sectionTitle}>📚 My Library (Web based)</Text>
 
       <ScrollView>
@@ -153,16 +196,15 @@ export default function Index() {
           ➕ Add books from an online library
         </Text>
       </Pressable>
-    <meta http-equiv="Content-Security-Policy" content="script-src 'self' https://apis.google.com https://www.gstatic.com; object-src 'none';"></meta>
     </View>
   );
 }
-
 
 /*
 
 <Pressable onPress={deleteAllBooks} style={styles.button}>
         <Text style={styles.buttonText}>🗑️ Delete all books</Text>
       </Pressable>
-
+<meta http-equiv="Content-Security-Policy" content="script-src 'self' https://apis.google.com https://www.gstatic.com; object-src 'none';"></meta>
 */
+
