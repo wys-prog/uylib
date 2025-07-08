@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html>
   <head>
+    <link rel="icon" href="favicon.png" type="image/png" />
+    <link rel="apple-touch-icon" href="favicon.png" />
+    <meta name="theme-color" content="#f7f3e9" />
     <meta charset="utf-8" />
     <title>UYBook Reader</title>
     <link rel="stylesheet" href="style.css" />
@@ -13,7 +16,14 @@
     <button id="clearDB">Delete All Books</button>
     <button id="exportLib">Export Library</button>
     <input type="file" id="importLib" accept=".json" />
+    <button id="createBookBtn">➕ Create New Book</button>
+    <script>
+      document.getElementById("createBookBtn").onclick = () => {
+        window.location.href = "create.html";
+      };
+      </script>
     <p id="storageUsage"></p>
+
 
     <div id="bookList"></div>
 
@@ -28,6 +38,7 @@
       import { parseBookFile } from "./parse.js";
       import { openDB } from "./common.js"
       let db;
+      const visited = new Set();
 
       async function addBook(db, id, rawContent) {
         return new Promise((resolve, reject) => {
@@ -80,13 +91,14 @@
                 <h2>${meta.title || "(Untitled)"}</h2>
                 <p><strong>Author:</strong> ${meta.author || "Unknown"}</p>
                 <p>${meta.description || ""}</p>
-                <button>View</button>
+                <button class="viewBtn">View</button>
                 <button class="download">Download</button>
+                <button class="deleteBtn" style="color:red;">Delete</button> <!-- Bouton supprimer ajouté -->
               </div>
             </div>
           `;
 
-          card.querySelector("button").onclick = () => {
+          card.querySelector(".viewBtn").onclick = () => {
             sessionStorage.setItem("currentBook", book.raw);
             sessionStorage.setItem("currentBookId", book.id);
             window.location.href = "reader.html";
@@ -102,9 +114,26 @@
             URL.revokeObjectURL(url);
           };
 
+          // Nouveau : supprimer un seul livre
+          card.querySelector(".deleteBtn").onclick = async () => {
+            if (confirm(`Delete "${meta.title || "this book"}"?`)) {
+              const tx = db.transaction("books", "readwrite");
+              const store = tx.objectStore("books");
+              store.delete(book.id);
+              tx.oncomplete = async () => {
+                const allBooks = await getAllBooks(db);
+                displayBooks(allBooks);
+              };
+              tx.onerror = () => {
+                alert("Failed to delete the book.");
+              };
+            }
+          };
+
           bookList.appendChild(card);
         });
       }
+
 
 
       (async () => {
@@ -174,6 +203,10 @@
         displayBooks(books);
 
         const LIB_STORAGE_KEY = "uybook_libraries";
+        const SYSTEM_LIBRARIES = [
+          "", 
+        ];
+
 
         function getStoredLibraries() {
           const raw = localStorage.getItem(LIB_STORAGE_KEY);
@@ -184,54 +217,118 @@
           localStorage.setItem(LIB_STORAGE_KEY, JSON.stringify(libs));
         }
 
-        // Charger et afficher toutes les bibliothèques
         async function loadOnlineLibraries() {
           const container = document.getElementById("onlineLibraries");
           container.innerHTML = "";
-          const libraries = getStoredLibraries();
 
-          for (const url of libraries) {
-            const libSection = document.createElement("div");
-            libSection.innerHTML = `<h3>${url}</h3><div class="lib-books" style="display:flex;flex-wrap:wrap;gap:1em"></div>`;
-            const bookContainer = libSection.querySelector(".lib-books");
-            container.appendChild(libSection);
+            const userLibs = getStoredLibraries();
+            const allLibs = [...SYSTEM_LIBRARIES, ...userLibs];
 
-            try {
-              const res = await fetch(url);
-              const books = await res.json();
+            if (allLibs.length === 0) {
+              container.textContent = "No libraries added.";
+              return;
+            }
 
+          for (const url of urls) {
+            const { books, name } = await loadLibrary(url);
+
+            const section = document.createElement("section");
+            section.className = "online-library";
+
+            const header = document.createElement("div");
+            header.style.display = "flex";
+            header.style.justifyContent = "space-between";
+            header.style.alignItems = "center";
+
+            const title = document.createElement("h3");
+            title.textContent = name || (new URL(url)).pathname.split('/').pop() || url;
+
+            const removeBtn = document.createElement("button");
+            removeBtn.textContent = "🗑️ Delete";
+            removeBtn.style.marginLeft = "1em";
+            removeBtn.onclick = () => {
+              if (confirm(`Do you really want to delete library "${title.textContent}" ?`)) {
+                const current = getStoredLibraries().filter(l => l !== url);
+                saveLibraries(current);
+                loadOnlineLibraries();
+              }
+            };
+
+            header.appendChild(title);
+            header.appendChild(removeBtn);
+            section.appendChild(header);
+
+
+            if (books.length === 0) {
+              section.appendChild(document.createTextNode("No books found in this library."));
+            } else {
               books.forEach(book => {
                 const card = document.createElement("div");
-                card.style.border = "1px solid #ccc";
-                card.style.padding = "10px";
-                card.style.width = "200px";
-                card.style.boxShadow = "0 2px 5px rgba(0,0,0,0.1)";
+                card.className = "book-card";
+
                 card.innerHTML = `
-                  <img src="${book["cover-link"]}" alt="cover" style="width:100%;height:auto">
-                  <h4>${book.title}</h4>
-                  <p><strong>${book.author}</strong></p>
-                  <p>${book.description || ""}</p>
-                  <button>Download</button>
+                  <div style="display:flex;gap:1em;align-items:flex-start;">
+                    ${book["cover-link"] ? `<img src="${book["cover-link"]}" alt="cover" style="width:100px;height:auto;border:1px solid #ccc;border-radius:4px;">` : ''}
+                    <div>
+                      <h4>${book.title}</h4>
+                      <p><strong>Author:</strong> ${book.author || "Unknown"}</p>
+                      <button class="downloadOnline">Download</button>
+                    </div>
+                  </div>
                 `;
 
-                card.querySelector("button").onclick = async () => {
+                card.querySelector(".downloadOnline").onclick = async () => {
                   try {
-                    const content = await fetch(book["content-link"]).then(r => r.text());
+                    const res = await fetch(book["content-link"]);
+                    const content = await res.text();
                     const id = book.title + "_" + Date.now();
                     await addBook(db, id, content);
-                    const all = await getAllBooks(db);
-                    displayBooks(all);
-                    alert(`✅ "${book.title}" added!`);
-                  } catch (err) {
-                    alert("❌ Failed to download book.");
+                    const allBooks = await getAllBooks(db);
+                    displayBooks(allBooks);
+                    alert(`✅ "${book.title}" added to your library!`);
+                  } catch (e) {
+                    alert(`❌ Failed to download book: ${book.title}`);
                   }
                 };
 
-                bookContainer.appendChild(card);
+                section.appendChild(card);
               });
-            } catch (err) {
-              libSection.innerHTML += `<p style="color:red">Failed to load library.</p>`;
             }
+
+            container.appendChild(section);
+          }
+        }
+
+
+        async function loadLibrary(url, depth = 0) {
+          if (visited.has(url)) return { books: [], name: null };
+          visited.add(url);
+
+          try {
+            const res = await fetch(url);
+            const items = await res.json();
+
+            let books = [];
+            let name = null;
+
+            for (const item of items) {
+              if (item.type === "library" && item.url) {
+                const nested = await loadLibrary(item.url, depth + 1);
+                books.push(...nested.books);
+              } else if (item.title && item["cover-link"] && item["content-link"]) {
+                books.push(item);
+              }
+
+              // Trouve le nom si présent dans un item type "meta"
+              if (!name && item.type === "meta" && item.name) {
+                name = item.name;
+              }
+            }
+
+            return { books, name };
+          } catch (e) {
+            console.error("Erreur de chargement de la bibliothèque:", url);
+            return { books: [], name: null };
           }
         }
 
