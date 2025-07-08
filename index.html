@@ -222,14 +222,14 @@
           container.innerHTML = "";
 
             const userLibs = getStoredLibraries();
-            const allLibs = [...SYSTEM_LIBRARIES, ...userLibs];
+            const urls = [...SYSTEM_LIBRARIES, ...userLibs];
 
-            if (allLibs.length === 0) {
+            if (urls.length === 0) {
               container.textContent = "No libraries added.";
               return;
             }
 
-          for (const url of allLibs) {
+          for (const url of urls) {
             const { books, name } = await loadLibrary(url);
 
             const section = document.createElement("section");
