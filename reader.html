@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>UYBook Reader</title>
+  <link rel="stylesheet" href="style.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Amiri&family=Scheherazade+New&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Amiri', 'Scheherazade New', serif;
+      background: #f7f3e9;
+      color: #1a1a1a;
+    }
+
+    #toolbar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      background: white;
+      padding: 10px;
+      border-bottom: 1px solid #ccc;
+      z-index: 1000;
+      display: flex;
+      justify-content: left; /* ← aligner les boutons à gauche */
+      gap: 0.5rem; /* ← petit espace entre les boutons */
+      flex-wrap: wrap;
+      flex-direction: row;
+    }
+
+    #bookMeta {
+      text-align: center;           /* ← centrer le titre, auteur, description */
+      margin-bottom: 2rem;
+    }
+
+    #contentWrapper {
+      margin-top: 80px;
+      max-width: 900px;
+      padding: 2rem 1rem;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    h1, h2, h3 {
+      color: #264653;
+      font-family: 'Amiri', serif;
+      margin-top: 2em;
+    }
+    p {
+      margin: 1.2em 0;
+      line-height: 1.8;
+      font-size: 1.4rem;
+    }
+    img {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      margin: 1em auto;
+    }
+    ::selection {
+      background: #cde8e0;
+    }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <button id="editMeta" title="Edit metadata">⋮</button>
+    <button id="highlight">Highlight</button>
+    <button id="addNote">Add Note</button>
+    <button id="saveMeta">💾 Save</button>
+    <button id="unhighlight">Unhighlight</button>
+    <button id="showNotes">Show Notes</button>
+    <button onclick="window.location.href='index.html'">← Back</button>
+  </div>
+
+  <div id="contentWrapper">
+    <div id="bookMeta"></div>
+    <div id="bookContent"></div>
+  </div>
+
+  <script type="module">
+    import { parseBookFile, buildBookRaw } from './parse.js';
+    import { openDB } from './common.js';
+
+    const raw = sessionStorage.getItem('currentBook');
+    const bookId = sessionStorage.getItem('currentBookId');
+    if (!raw || !bookId) {
+      document.body.innerHTML = '<p>Error: No book loaded.</p>';
+      throw new Error('No book');
+    }
+
+    const { meta, html } = parseBookFile(raw);
+    meta.highlights = meta.highlights || [];
+    meta.notes = meta.notes || [];
+
+    const bookMeta = document.getElementById('bookMeta');
+    const bookContent = document.getElementById('bookContent');
+
+    bookMeta.innerHTML = `
+      <h2>${meta.title || '(Untitled)'}</h2>
+      <p><strong>Author:</strong> ${meta.author || 'Unknown'}</p>
+      <p>${meta.description || ''}</p>
+    `;
+
+    bookContent.innerHTML = html;
+    setTimeout(() => {
+      window.scrollTo(0, meta.scrollY || 0);
+    }, 50);
+
+    document.getElementById('highlight').onclick = () => {
+      const sel = window.getSelection();
+      if (sel.isCollapsed) return alert("Empty selection");
+      const range = sel.getRangeAt(0);
+      const span = document.createElement("span");
+      span.style.backgroundColor = "yellow";
+      span.dataset.highlightId = Date.now();
+      range.surroundContents(span);
+      meta.highlights.push({ id: span.dataset.highlightId, text: sel.toString(), scrollY: window.scrollY });
+      sel.removeAllRanges();
+    };
+
+    document.getElementById('addNote').onclick = () => {
+      const sel = window.getSelection();
+      if (sel.isCollapsed) return alert("Empty selection");
+      const note = prompt("Write your note:");
+      if (!note) return;
+      const range = sel.getRangeAt(0);
+      const span = document.createElement("span");
+      span.style.backgroundColor = "lightblue";
+      span.title = note;
+      span.dataset.noteId = Date.now();
+      range.surroundContents(span);
+      meta.notes.push({ id: span.dataset.noteId, text: sel.toString(), note, scrollY: window.scrollY });
+      sel.removeAllRanges();
+    };
+
+    document.getElementById('unhighlight').onclick = () => {
+      const sel = window.getSelection();
+      if (sel.isCollapsed) return alert("Empty selection");
+      const range = sel.getRangeAt(0);
+      const container = range.commonAncestorContainer;
+      const highlightsToRemove = [];
+
+      function findHighlights(node) {
+        if (node.nodeType === 1 && node.dataset.highlightId) {
+          const nodeRange = document.createRange();
+          nodeRange.selectNodeContents(node);
+          if (
+            range.compareBoundaryPoints(Range.END_TO_START, nodeRange) < 0 &&
+            range.compareBoundaryPoints(Range.START_TO_END, nodeRange) > 0
+          ) highlightsToRemove.push(node);
+        }
+        node.childNodes?.forEach?.(findHighlights);
+      }
+
+      findHighlights(container);
+      if (!highlightsToRemove.length) return alert("No highlights found in selection");
+      highlightsToRemove.forEach(span => {
+        const parent = span.parentNode;
+        while (span.firstChild) parent.insertBefore(span.firstChild, span);
+        parent.removeChild(span);
+        const index = meta.highlights.findIndex(h => h.id === span.dataset.highlightId);
+        if (index !== -1) meta.highlights.splice(index, 1);
+      });
+      sel.removeAllRanges();
+      alert("Highlight(s) removed");
+    };
+
+    document.getElementById('showNotes').onclick = () => {
+      if (!meta.notes?.length) return alert("No notes found.");
+      let message = "Notes:\n\n";
+      meta.notes.forEach(note => {
+        message += `• "${note.text}"\n  → ${note.note}\n\n`;
+      });
+      alert(message);
+    };
+
+    document.getElementById('saveMeta').onclick = async () => {
+      meta.scrollY = window.scrollY;
+      const newRaw = buildBookRaw(meta, bookContent.innerHTML);
+      const db = await openDB();
+      const tx = db.transaction('books', 'readwrite');
+      tx.objectStore('books').put({ id: bookId, raw: newRaw, addedAt: Date.now() });
+      tx.oncomplete = () => alert('Saved!');
+      tx.onerror = () => alert('Error while saving');
+    };
+
+    window.addEventListener('beforeunload', async () => {
+      try {
+        meta.scrollY = window.scrollY;
+        const newRaw = buildBookRaw(meta, bookContent.innerHTML);
+        const db = await openDB();
+        const tx = db.transaction('books', 'readwrite');
+        tx.objectStore('books').put({ id: bookId, raw: newRaw, addedAt: Date.now() });
+      } catch (err) {
+        console.warn("Auto-save failed", err);
+      }
+    });
+  </script>
+</body>
+</html>

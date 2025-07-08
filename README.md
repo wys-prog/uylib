@@ -1,1 +1,0 @@
-# UyLib -- Uyghur Library

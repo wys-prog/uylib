@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>UYBook Reader</title>
+    <link rel="stylesheet" href="style.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Amiri&family=Scheherazade+New&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <h1>📚 My UY Books (IndexedDB)</h1>
+
+    <input type="file" id="fileInput" multiple accept=".uybook" />
+    <button id="clearDB">Delete All Books</button>
+    <button id="exportLib">Export Library</button>
+    <input type="file" id="importLib" accept=".json" />
+    <p id="storageUsage"></p>
+
+    <div id="bookList"></div>
+
+    <hr>
+    <h2>🌐 Online Libraries</h2>
+    <input id="newLibUrl" placeholder="Enter library URL (JSON)" style="width:60%" />
+    <button id="addLibraryBtn">Add Library</button>
+    <div id="onlineLibraries"></div>
+
+
+    <script type="module">
+      import { parseBookFile } from "./parse.js";
+      import { openDB } from "./common.js"
+      let db;
+
+      async function addBook(db, id, rawContent) {
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction("books", "readwrite");
+          const store = tx.objectStore("books");
+          store.put({ id, raw: rawContent, addedAt: Date.now() });
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+          showStorageEstimate();
+        });
+      }
+
+      async function getAllBooks(db) {
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction("books", "readonly");
+          const store = tx.objectStore("books");
+          const req = store.getAll();
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error);
+        });
+      }
+
+      async function clearBooks(db) {
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction("books", "readwrite");
+          const store = tx.objectStore("books");
+          const req = store.clear();
+          req.onsuccess = () => resolve();
+          req.onerror = () => reject(req.error);
+        });
+      }
+
+      function displayBooks(books) {
+        const bookList = document.getElementById("bookList");
+        bookList.innerHTML = "";
+        if (books.length === 0) {
+          bookList.textContent = "No books loaded. Add a file!";
+          return;
+        }
+
+        books.forEach((book) => {
+          const { meta } = parseBookFile(book.raw);
+          const card = document.createElement("div");
+          card.className = "book-card";
+
+          card.innerHTML = `
+            <div style="display:flex;gap:1em;align-items:flex-start;">
+              ${meta.cover ? `<img src="${meta.cover}" alt="cover" style="width:150px;height:auto;object-fit:cover;border:1px solid #ccc;border-radius:4px;">` : ''}
+              <div style="flex-grow:1;">
+                <h2>${meta.title || "(Untitled)"}</h2>
+                <p><strong>Author:</strong> ${meta.author || "Unknown"}</p>
+                <p>${meta.description || ""}</p>
+                <button>View</button>
+                <button class="download">Download</button>
+              </div>
+            </div>
+          `;
+
+          card.querySelector("button").onclick = () => {
+            sessionStorage.setItem("currentBook", book.raw);
+            sessionStorage.setItem("currentBookId", book.id);
+            window.location.href = "reader.html";
+          };
+
+          card.querySelector(".download").onclick = () => {
+            const blob = new Blob([book.raw], { type: "text/plain" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${meta.title || "book"}.uybook`;
+            a.click();
+            URL.revokeObjectURL(url);
+          };
+
+          bookList.appendChild(card);
+        });
+      }
+
+
+      (async () => {
+        db = await openDB();
+
+        const fileInput = document.getElementById("fileInput");
+        const clearDBBtn = document.getElementById("clearDB");
+
+        clearDBBtn.onclick = async () => {
+          if (confirm("Delete all books?")) {
+            await clearBooks(db);
+            displayBooks([]);
+          }
+        };
+
+        fileInput.onchange = async (e) => {
+          const files = e.target.files;
+          for (const file of files) {
+            const raw = await file.text();
+            const id = file.name + "_" + file.lastModified;
+            await addBook(db, id, raw);
+          }
+          const all = await getAllBooks(db);
+          displayBooks(all);
+        };
+
+        document.getElementById("exportLib").onclick = async () => {
+          const allBooks = await getAllBooks(db);
+          const json = JSON.stringify(allBooks);
+          const blob = new Blob([json], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "uybook-library.json";
+          a.click();
+          URL.revokeObjectURL(url);
+        };
+
+        document.getElementById("importLib").onchange = async (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+          const text = await file.text();
+          let data;
+          try {
+            data = JSON.parse(text);
+          } catch (e) {
+            alert("Invalid JSON file");
+            return;
+          }
+
+          if (!Array.isArray(data)) {
+            alert("Invalid JSON format");
+            return;
+          }
+
+          for (const book of data) {
+            if (book.id && book.raw) {
+              await addBook(db, book.id, book.raw);
+            }
+          }
+
+          const allBooks = await getAllBooks(db);
+          displayBooks(allBooks);
+        };
+
+        const books = await getAllBooks(db);
+        displayBooks(books);
+
+        const LIB_STORAGE_KEY = "uybook_libraries";
+
+        function getStoredLibraries() {
+          const raw = localStorage.getItem(LIB_STORAGE_KEY);
+          return raw ? JSON.parse(raw) : [];
+        }
+
+        function saveLibraries(libs) {
+          localStorage.setItem(LIB_STORAGE_KEY, JSON.stringify(libs));
+        }
+
+        // Charger et afficher toutes les bibliothèques
+        async function loadOnlineLibraries() {
+          const container = document.getElementById("onlineLibraries");
+          container.innerHTML = "";
+          const libraries = getStoredLibraries();
+
+          for (const url of libraries) {
+            const libSection = document.createElement("div");
+            libSection.innerHTML = `<h3>${url}</h3><div class="lib-books" style="display:flex;flex-wrap:wrap;gap:1em"></div>`;
+            const bookContainer = libSection.querySelector(".lib-books");
+            container.appendChild(libSection);
+
+            try {
+              const res = await fetch(url);
+              const books = await res.json();
+
+              books.forEach(book => {
+                const card = document.createElement("div");
+                card.style.border = "1px solid #ccc";
+                card.style.padding = "10px";
+                card.style.width = "200px";
+                card.style.boxShadow = "0 2px 5px rgba(0,0,0,0.1)";
+                card.innerHTML = `
+                  <img src="${book["cover-link"]}" alt="cover" style="width:100%;height:auto">
+                  <h4>${book.title}</h4>
+                  <p><strong>${book.author}</strong></p>
+                  <p>${book.description || ""}</p>
+                  <button>Download</button>
+                `;
+
+                card.querySelector("button").onclick = async () => {
+                  try {
+                    const content = await fetch(book["content-link"]).then(r => r.text());
+                    const id = book.title + "_" + Date.now();
+                    await addBook(db, id, content);
+                    const all = await getAllBooks(db);
+                    displayBooks(all);
+                    alert(`✅ "${book.title}" added!`);
+                  } catch (err) {
+                    alert("❌ Failed to download book.");
+                  }
+                };
+
+                bookContainer.appendChild(card);
+              });
+            } catch (err) {
+              libSection.innerHTML += `<p style="color:red">Failed to load library.</p>`;
+            }
+          }
+        }
+
+        // Ajout dynamique de nouvelle URL
+        document.getElementById("addLibraryBtn").onclick = () => {
+          const input = document.getElementById("newLibUrl");
+          const url = input.value.trim();
+          if (!url) return;
+
+          const current = getStoredLibraries();
+          if (!current.includes(url)) {
+            current.push(url);
+            saveLibraries(current);
+            loadOnlineLibraries();
+          }
+
+          input.value = "";
+        };
+
+        async function showStorageEstimate() {
+          if ('storage' in navigator && 'estimate' in navigator.storage) {
+            const { usage, quota } = await navigator.storage.estimate();
+            const usedMB = (usage / 1024 / 1024).toFixed(2);
+            const quotaMB = (quota / 1024 / 1024).toFixed(2);
+            const percent = ((usage / quota) * 100).toFixed(1);
+            document.getElementById("storageUsage").textContent =
+            `💾 Storage used: ${usedMB} MB / ${quotaMB} MB (${percent}%)`;
+          }
+        }
+
+        await showStorageEstimate();
+        await loadOnlineLibraries();
+      })();
+    </script>
+  </body>
+</html>
