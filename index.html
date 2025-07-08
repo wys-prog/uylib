@@ -229,7 +229,7 @@
               return;
             }
 
-          for (const url of urls) {
+          for (const url of allLibs) {
             const { books, name } = await loadLibrary(url);
 
             const section = document.createElement("section");
