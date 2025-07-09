@@ -45,35 +45,7 @@
   <div id="funFact">💡 Fun Fact: If you print this page, the internet gets one byte heavier.</div>
 
   <script type="module">
-    function encode(str) {
-      return encodeURIComponent(String(str));
-    }
-
-    function buildBookRaw(meta, html) {
-      const metaEntries = Object.entries(meta)
-        .filter(([key]) => !['highlights', 'notes', 'scrollY', 'cover'].includes(key))
-        .map(([key, value]) => `@${key}:'${encode(value)}'`);
-
-      if (meta.highlights?.length) {
-        metaEntries.push(`@highlights:'${encode(JSON.stringify(meta.highlights))}'`);
-      }
-      if (meta.notes?.length) {
-        metaEntries.push(`@notes:'${encode(JSON.stringify(meta.notes))}'`);
-      }
-      if (meta.scrollY) {
-        metaEntries.push(`@scrollY:'${meta.scrollY}'`);
-      }
-
-      const metaPart = `.meta:${metaEntries.join(',')};`;
-      const htmlPart = `.bytes:[${html}];`;
-
-      let raw = `${metaPart}\n${htmlPart}`;
-      if (meta.cover) {
-        raw += `\n.cover:${meta.cover}`;
-      }
-
-      return raw;
-    }
+    import { buildBookRaw, cleanHtml } from "./parse.js"
 
     document.getElementById('saveBtn').addEventListener('click', async () => {
       const title = document.getElementById('title').value.trim();
