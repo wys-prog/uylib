@@ -173,7 +173,3 @@ input:focus, textarea:focus {
   background-color: #1b4a56;
   box-shadow: 0 3px 10px rgba(27, 74, 86, 0.9);
 }
-
-input[type="file"] {
-  display: none;
-}
