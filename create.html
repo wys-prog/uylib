@@ -1,119 +1,186 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Create a UYBOOK</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    label { display: block; margin-top: 10px; }
-    textarea { width: 100%; height: 150px; }
-    #funFact { margin-top: 40px; font-style: italic; color: #666; }
-  </style>
+  <meta charset="UTF-8">
+  <title>UYBook Creator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Amiri&family=Scheherazade+New&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body {
+      font-family: 'Amiri', serif;
+      margin: 0;
+      padding: 0;
+      background: #faf8f5;
+      color: #222;
+    }
+    header {
+      background: #eee;
+      padding: 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .controls, .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    #editor {
+      padding: 2rem;
+      min-height: 80vh;
+      outline: none;
+      background: white;
+      margin: 1rem;
+      border: 1px solid #ccc;
+    }
+    select, input[type="text"] {
+      padding: 0.3rem;
+      font-size: 1rem;
+    }
+    button {
+      padding: 0.4rem 0.6rem;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    img.cover-preview {
+      max-height: 100px;
+      margin-left: 1rem;
+    }
+  </style>
 </head>
 <body>
+  <header>
+    <div class="meta">
+      <input type="text" id="title" placeholder="Book Title" />
+      <input type="text" id="author" placeholder="Author" />
+      <input type="text" id="description" placeholder="Short description" />
+      <input type="file" id="coverUpload" accept="image/*" />
+      <img class="cover-preview" id="coverPreview" />
+    </div>
+    <div class="controls">
+      
+      <button onclick="exec('bold')">Bold</button>
+      <button onclick="exec('italic')">Italic</button>
+      <button onclick="exec('insertUnorderedList')">List</button>
+      <button onclick="exec('formatBlock','<h1>')">H1</button>
+      <button onclick="exec('formatBlock','<h2>')">H2</button>
+      <button onclick="exec('formatBlock','<h3>')">H3</button>
+      <button onclick="insertImage()">📷</button>
+      <select id="fontSelect" onchange="changeFont(this.value)">
+        <option disabled selected>Font</option>
+        <option value="Amiri">Amiri</option>
+        <option value="Scheherazade New">Scheherazade</option>
+        <option value="serif">Serif</option>
+        <option value="sans-serif">Sans-serif</option>
+      </select>
+      <input type="text" id="customFontUrl" placeholder="Custom font URL (ttf)" />
+      <button onclick="addCustomFont()">Add Font</button>
+      <button onclick="exportBook()">💾 Export</button>
+      <button onclick="importBook()">📂 Import</button>
+    </div>
+  </header>
 
-  <h1>Create a UYBOOK</h1>
+  <main>
+    <div id="editor" contenteditable="true"></div>
+  </main>
 
-  <label>
-    Title:
-    <input type="text" id="title" placeholder="Book title" />
-  </label>
+  <script>
+    const editorEl = document.getElementById('editor');
+    const cleanHtml = html => html.replace(/>\s+</g, '><').replace('\n', '');
 
-  <label>
-    Author:
-    <input type="text" id="author" placeholder="Author name" />
-  </label>
-
-  <label>
-    Description:
-    <textarea id="description" placeholder="Short description"></textarea>
-  </label>
-
-  <label>
-    HTML Content:
-    <textarea id="content" placeholder="Paste your HTML here"></textarea>
-  </label>
-  <label>
-    Upload HTML file:
-    <input type="file" id="htmlFile" accept=".html,.htm,text/html" />
-  </label>
-
-
-  <label>
-    Cover image:
-    <input type="file" id="coverFile" accept="image/*" />
-  </label>
-
-  <button id="saveBtn">Generate and download (.uybook)</button>
-
-  <div id="funFact">💡 Fun Fact: If you print this page, the internet gets one byte heavier.</div>
-
-  <script type="module">
-    import { buildBookRaw, cleanHtml } from "./parse.js"
-
-    function readFileAsText(file) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsText(file);
-      });
+    function exec(cmd, value = null) {
+      document.execCommand(cmd, false, value);
     }
 
-    document.getElementById('saveBtn').addEventListener('click', async () => {
-      const title = document.getElementById('title').value.trim();
-      const author = document.getElementById('author').value.trim();
-      const description = document.getElementById('description').value.trim();
-      let content = document.getElementById('content').value.trim();
-      const htmlFile = document.getElementById('htmlFile').files[0];
-      if (htmlFile) {
-        content = await readFileAsText(htmlFile);
-      }
+    function insertImage() {
+      const url = prompt("Image URL:");
+      if (url) exec('insertImage', url);
+    }
 
+    function changeFont(font) {
+      editorEl.style.fontFamily = font;
+    }
 
-      if (!title || !author || !content) {
-        alert('Title, author and HTML content are required.');
-        return;
-      }
+    function addCustomFont() {
+      const url = document.getElementById("customFontUrl").value.trim();
+      if (!url) return alert("Provide a TTF URL");
+      const name = prompt("Font name?");
+      if (!name) return;
+      const style = document.createElement("style");
+      style.innerHTML = `@font-face { font-family: '${name}'; src: url('${url}'); }`;
+      document.head.appendChild(style);
+      const select = document.getElementById("fontSelect");
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name;
+      select.appendChild(opt);
+      select.value = name;
+      changeFont(name);
+    }
 
-      let coverBase64 = null;
-      const coverFile = document.getElementById('coverFile').files[0];
-      if (coverFile) {
-        coverBase64 = await readFileAsBase64(coverFile);
-      }
+    document.getElementById("coverUpload").onchange = e => {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onload = () => document.getElementById("coverPreview").src = reader.result;
+      reader.readAsDataURL(file);
+    };
 
+    function exportBook() {
       const meta = {
-        title,
-        author,
-        description,
-        highlights: [],
-        notes: [],
+        title: document.getElementById('title').value,
+        author: document.getElementById('author').value,
+        description: document.getElementById('description').value,
         scrollY: 0,
-        cover: coverBase64,
+        highlights: [],
+        notes: []
       };
-
-      const raw = buildBookRaw(meta, content);
-
-      const blob = new Blob([raw], { type: 'text/plain' });
+      const cover = document.getElementById("coverPreview").src;
+      if (cover.startsWith("data:")) meta.cover = cover;
+      const encoded = encodeURIComponent(cleanHtml(editorEl.innerHTML));
+      const metaEncoded = Object.entries(meta).map(([k,v]) => `@${k}:'${encodeURIComponent(v)}'`).join(',');
+      const raw = `.meta:${metaEncoded};\n.bytes:[${encoded}];` + (meta.cover ? `\n.cover:${meta.cover}` : '');
+      const blob = new Blob([raw], {type: 'text/plain'});
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${title.replace(/\s+/g, '_')}.uybook`;
+      a.download = (meta.title || 'untitled') + '.uybook';
       a.click();
-      URL.revokeObjectURL(url);
-    });
+    }
 
-    function readFileAsBase64(file) {
-      return new Promise((resolve, reject) => {
+    function importBook() {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.uybook';
+      input.onchange = e => {
+        const file = e.target.files[0];
         const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+        reader.onload = () => {
+          const raw = reader.result;
+          const metaMatch = raw.match(/\.meta:([\s\S]*?);/);
+          const bytesMatch = raw.match(/\.bytes:\[(.+?)\];/s);
+          const coverMatch = raw.match(/\.cover:(.+)$/s);
+          const decode = s => decodeURIComponent(s);
+
+          const meta = {};
+          const metaRaw = metaMatch[1];
+          const regex = /@([\w\d_]+):'(.*?)'(?:,|$)/gs;
+          let match;
+          while ((match = regex.exec(metaRaw)) !== null) {
+            const key = match[1];
+            meta[key] = decode(match[2]);
+          }
+          document.getElementById('title').value = meta.title || '';
+          document.getElementById('author').value = meta.author || '';
+          document.getElementById('description').value = meta.description || '';
+          editorEl.innerHTML = decode(bytesMatch[1]);
+          if (coverMatch) document.getElementById("coverPreview").src = coverMatch[1].trim();
+        };
+        reader.readAsText(file);
+      };
+      input.click();
     }
   </script>
-
 </body>
 </html>
