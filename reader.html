@@ -70,6 +70,7 @@
     <button id="saveMeta">💾 Save</button>
     <button id="unhighlight">Unhighlight</button>
     <button id="showNotes">Show Notes</button>
+    <input type="search" id="searchBox" placeholder="🔍 Search..." style="margin-left: auto;" />
     <button onclick="window.location.href='index.html'">← Back</button>
   </div>
 
@@ -196,6 +197,15 @@
         console.warn("Auto-save failed", err);
       }
     });
+
+    document.getElementById("searchBox").oninput = (e) => {
+      const query = e.target.value.toLowerCase();
+      const paragraphs = bookContent.querySelectorAll("p, h1, h2, h3");
+      paragraphs.forEach(p => {
+        const text = p.textContent.toLowerCase();
+        p.style.backgroundColor = text.includes(query) ? "#ffffcc" : "";
+      });
+    };
   </script>
 </body>
 </html>

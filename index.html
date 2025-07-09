@@ -7,219 +7,254 @@
     <meta charset="utf-8" />
     <title>UYBook Reader</title>
     <link rel="stylesheet" href="style.css" />
-    <link href="https://fonts.googleapis.com/css2?family=Amiri&family=Scheherazade+New&display=swap" rel="stylesheet" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Amiri&family=Scheherazade+New&display=swap"
+      rel="stylesheet"
+    />
   </head>
   <body>
-    <h1>📚 My UY Books (IndexedDB)</h1>
+    <div class="container">
+      <h1>📚 My UY Books (IndexedDB)</h1>
 
-    <input type="file" id="fileInput" multiple accept=".uybook" />
-    <button id="clearDB">Delete All Books</button>
-    <button id="exportLib">Export Library</button>
-    <input type="file" id="importLib" accept=".json" />
-    <button id="createBookBtn">➕ Create New Book</button>
-    <script>
-      document.getElementById("createBookBtn").onclick = () => {
-        window.location.href = "create.html";
-      };
+      <input type="file" id="fileInput" multiple accept=".uybook" hidden />
+      <label for="fileInput" class="btn">📥 Upload .uybook</label>
+
+      <input type="file" id="importLib" accept=".json" hidden />
+      <label for="importLib" class="btn">📂 Import Library</label>
+
+      <button id="exportLib" class="btn">📤 Export Library</button>
+      <button id="clearDB" class="btn">🗑️ Delete All Books</button>
+      <button id="createBookBtn" class="btn">➕ Create New Book</button>
+
+      <script>
+        document.getElementById("createBookBtn").onclick = () => {
+          window.location.href = "create.html";
+        };
       </script>
-    <p id="storageUsage"></p>
 
+      <p id="storageUsage"></p>
 
-    <div id="bookList"></div>
+      <div id="bookList"></div>
 
-    <hr>
-    <h2>🌐 Online Libraries</h2>
-    <input id="newLibUrl" placeholder="Enter library URL (JSON)" style="width:60%" />
-    <button id="addLibraryBtn">Add Library</button>
-    <div id="onlineLibraries"></div>
+      <hr />
+      <h2>🌐 Online Libraries</h2>
+      <input
+        id="newLibUrl"
+        placeholder="Enter library URL (JSON)"
+        style="width: 60%"
+      />
+      <button id="addLibraryBtn">Add Library</button>
+      <div id="onlineLibraries"></div>
 
+      <script type="module">
+        import { parseBookFile } from "./parse.js";
+        import { openDB } from "./common.js";
+        let db;
+        const visited = new Set();
 
-    <script type="module">
-      import { parseBookFile } from "./parse.js";
-      import { openDB } from "./common.js"
-      let db;
-      const visited = new Set();
-
-      async function addBook(db, id, rawContent) {
-        return new Promise((resolve, reject) => {
-          const tx = db.transaction("books", "readwrite");
-          const store = tx.objectStore("books");
-          store.put({ id, raw: rawContent, addedAt: Date.now() });
-          tx.oncomplete = () => resolve();
-          tx.onerror = () => reject(tx.error);
-          showStorageEstimate();
-        });
-      }
-
-      async function getAllBooks(db) {
-        return new Promise((resolve, reject) => {
-          const tx = db.transaction("books", "readonly");
-          const store = tx.objectStore("books");
-          const req = store.getAll();
-          req.onsuccess = () => resolve(req.result);
-          req.onerror = () => reject(req.error);
-        });
-      }
-
-      async function clearBooks(db) {
-        return new Promise((resolve, reject) => {
-          const tx = db.transaction("books", "readwrite");
-          const store = tx.objectStore("books");
-          const req = store.clear();
-          req.onsuccess = () => resolve();
-          req.onerror = () => reject(req.error);
-        });
-      }
-
-      function displayBooks(books) {
-        const bookList = document.getElementById("bookList");
-        bookList.innerHTML = "";
-        if (books.length === 0) {
-          bookList.textContent = "No books loaded. Add a file!";
-          return;
+        async function showStorageEstimate() {
+          if ("storage" in navigator && "estimate" in navigator.storage) {
+            const { usage, quota } = await navigator.storage.estimate();
+            const usedMB = (usage / 1024 / 1024).toFixed(2);
+            const quotaMB = (quota / 1024 / 1024).toFixed(2);
+            const percent = ((usage / quota) * 100).toFixed(1);
+            document.getElementById(
+              "storageUsage"
+            ).textContent = `💾 Storage used: ${usedMB} MB / ${quotaMB} MB (${percent}%)`;
+          }
         }
 
-        books.forEach((book) => {
-          const { meta } = parseBookFile(book.raw);
-          const card = document.createElement("div");
-          card.className = "book-card";
+        async function addBook(db, id, rawContent) {
+          return new Promise((resolve, reject) => {
+            const tx = db.transaction("books", "readwrite");
+            const store = tx.objectStore("books");
+            store.put({ id, raw: rawContent, addedAt: Date.now() });
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+            showStorageEstimate();
+          });
+        }
 
-          card.innerHTML = `
-            <div style="display:flex;gap:1em;align-items:flex-start;">
-              ${meta.cover ? `<img src="${meta.cover}" alt="cover" style="width:150px;height:auto;object-fit:cover;border:1px solid #ccc;border-radius:4px;">` : ''}
-              <div style="flex-grow:1;">
-                <h2>${meta.title || "(Untitled)"}</h2>
-                <p><strong>Author:</strong> ${meta.author || "Unknown"}</p>
-                <p>${meta.description || ""}</p>
-                <button class="viewBtn">View</button>
-                <button class="download">Download</button>
-                <button class="deleteBtn" style="color:red;">Delete</button> <!-- Bouton supprimer ajouté -->
+        async function getAllBooks(db) {
+          return new Promise((resolve, reject) => {
+            const tx = db.transaction("books", "readonly");
+            const store = tx.objectStore("books");
+            const req = store.getAll();
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+          });
+        }
+
+        async function clearBooks(db) {
+          return new Promise((resolve, reject) => {
+            const tx = db.transaction("books", "readwrite");
+            const store = tx.objectStore("books");
+            store.clear();
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+            showStorageEstimate();
+          });
+        }
+
+        function displayBooks(books) {
+          const bookList = document.getElementById("bookList");
+          bookList.innerHTML = "";
+          if (books.length === 0) {
+            bookList.textContent = "No books loaded. Add a file!";
+            return;
+          }
+
+          books.sort((a, b) => b.addedAt - a.addedAt);
+
+          books.forEach((book) => {
+            //const { meta } = parseBookFile(book.raw);
+            let meta;
+            try {
+              ({ meta } = parseBookFile(book.raw));
+            } catch (e) {
+              console.warn("⚠️ Error parsing book", book.id, e);
+              return; // ignore ce livre, ou tu peux afficher un message d’erreur à l’utilisateur
+            }
+            const card = document.createElement("div");
+            card.className = "book-card";
+
+            card.innerHTML = `
+          <div style="display:flex;gap:1em;align-items:flex-start;">
+            ${
+              meta.cover
+                ? `<img src="${meta.cover}" alt="cover" style="width:150px;height:auto;object-fit:cover;border:1px solid #ccc;border-radius:4px;">`
+                : ""
+            }
+            <div style="flex-grow:1;">
+              <h2>${meta.title || "(Untitled)"}</h2>
+              <p><strong>Author:</strong> ${meta.author || "Unknown"}</p>
+              <p>${meta.description || ""}</p>
+              <button class="viewBtn">View</button>
+              <button class="download">Download</button>
+              <button class="deleteBtn" style="color:red;">Delete</button> <!-- Bouton supprimer ajouté -->
               </div>
-            </div>
-          `;
+              </div>
+              `;
 
-          card.querySelector(".viewBtn").onclick = () => {
-            sessionStorage.setItem("currentBook", book.raw);
-            sessionStorage.setItem("currentBookId", book.id);
-            window.location.href = "reader.html";
+            card.querySelector(".viewBtn").onclick = () => {
+              sessionStorage.setItem("currentBook", book.raw);
+              sessionStorage.setItem("currentBookId", book.id);
+              window.location.href = "reader.html";
+            };
+
+            card.querySelector(".download").onclick = () => {
+              const blob = new Blob([book.raw], { type: "text/plain" });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = `${meta.title || "book"}.uybook`;
+              a.click();
+              URL.revokeObjectURL(url);
+            };
+
+            // Nouveau : supprimer un seul livre
+            card.querySelector(".deleteBtn").onclick = async () => {
+              if (confirm(`Delete "${meta.title || "this book"}"?`)) {
+                const tx = db.transaction("books", "readwrite");
+                const store = tx.objectStore("books");
+                store.delete(book.id);
+                tx.oncomplete = async () => {
+                  const allBooks = await getAllBooks(db);
+                  displayBooks(allBooks);
+                };
+                tx.onerror = () => {
+                  alert("Failed to delete the book.");
+                };
+              }
+            };
+
+            bookList.appendChild(card);
+          });
+        }
+
+        (async () => {
+          db = await openDB();
+
+          const fileInput = document.getElementById("fileInput");
+          const clearDBBtn = document.getElementById("clearDB");
+
+          clearDBBtn.onclick = async () => {
+            if (confirm("Delete all books?")) {
+              await clearBooks(db);
+              displayBooks([]);
+            }
           };
 
-          card.querySelector(".download").onclick = () => {
-            const blob = new Blob([book.raw], { type: "text/plain" });
+          fileInput.onchange = async (e) => {
+            const files = e.target.files;
+            for (const file of files) {
+              const raw = await file.text();
+              const id = file.name + "_" + file.lastModified;
+              await addBook(db, id, raw);
+            }
+            const all = await getAllBooks(db);
+            displayBooks(all);
+          };
+
+          document.getElementById("exportLib").onclick = async () => {
+            const allBooks = await getAllBooks(db);
+            const json = JSON.stringify(allBooks);
+            const blob = new Blob([json], { type: "application/json" });
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
-            a.download = `${meta.title || "book"}.uybook`;
+            a.download = "uybook-library.json";
             a.click();
             URL.revokeObjectURL(url);
           };
 
-          // Nouveau : supprimer un seul livre
-          card.querySelector(".deleteBtn").onclick = async () => {
-            if (confirm(`Delete "${meta.title || "this book"}"?`)) {
-              const tx = db.transaction("books", "readwrite");
-              const store = tx.objectStore("books");
-              store.delete(book.id);
-              tx.oncomplete = async () => {
-                const allBooks = await getAllBooks(db);
-                displayBooks(allBooks);
-              };
-              tx.onerror = () => {
-                alert("Failed to delete the book.");
-              };
+          document.getElementById("importLib").onchange = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const text = await file.text();
+            let data;
+            try {
+              data = JSON.parse(text);
+            } catch (e) {
+              alert("Invalid JSON file");
+              return;
             }
+
+            if (!Array.isArray(data)) {
+              alert("Invalid JSON format");
+              return;
+            }
+
+            for (const book of data) {
+              if (book.id && book.raw) {
+                await addBook(db, book.id, book.raw);
+              }
+            }
+
+            const allBooks = await getAllBooks(db);
+            displayBooks(allBooks);
           };
 
-          bookList.appendChild(card);
-        });
-      }
+          const books = await getAllBooks(db);
+          displayBooks(books);
 
+          const LIB_STORAGE_KEY = "uybook_libraries";
+          const SYSTEM_LIBRARIES = [
+            "https://raw.githubusercontent.com/wys-prog/Uylib-Standard-Libraries/refs/heads/main/Uylib-Standard-Libraries.json",
+          ];
 
-
-      (async () => {
-        db = await openDB();
-
-        const fileInput = document.getElementById("fileInput");
-        const clearDBBtn = document.getElementById("clearDB");
-
-        clearDBBtn.onclick = async () => {
-          if (confirm("Delete all books?")) {
-            await clearBooks(db);
-            displayBooks([]);
-          }
-        };
-
-        fileInput.onchange = async (e) => {
-          const files = e.target.files;
-          for (const file of files) {
-            const raw = await file.text();
-            const id = file.name + "_" + file.lastModified;
-            await addBook(db, id, raw);
-          }
-          const all = await getAllBooks(db);
-          displayBooks(all);
-        };
-
-        document.getElementById("exportLib").onclick = async () => {
-          const allBooks = await getAllBooks(db);
-          const json = JSON.stringify(allBooks);
-          const blob = new Blob([json], { type: "application/json" });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = "uybook-library.json";
-          a.click();
-          URL.revokeObjectURL(url);
-        };
-
-        document.getElementById("importLib").onchange = async (e) => {
-          const file = e.target.files[0];
-          if (!file) return;
-          const text = await file.text();
-          let data;
-          try {
-            data = JSON.parse(text);
-          } catch (e) {
-            alert("Invalid JSON file");
-            return;
+          function getStoredLibraries() {
+            const raw = localStorage.getItem(LIB_STORAGE_KEY);
+            return raw ? JSON.parse(raw) : [];
           }
 
-          if (!Array.isArray(data)) {
-            alert("Invalid JSON format");
-            return;
+          function saveLibraries(libs) {
+            localStorage.setItem(LIB_STORAGE_KEY, JSON.stringify(libs));
           }
 
-          for (const book of data) {
-            if (book.id && book.raw) {
-              await addBook(db, book.id, book.raw);
-            }
-          }
-
-          const allBooks = await getAllBooks(db);
-          displayBooks(allBooks);
-        };
-
-        const books = await getAllBooks(db);
-        displayBooks(books);
-
-        const LIB_STORAGE_KEY = "uybook_libraries";
-        const SYSTEM_LIBRARIES = [
-          "https://raw.githubusercontent.com/wys-prog/Uylib-Standard-Libraries/refs/heads/main/Uylib-Standard-Libraries.json", 
-        ];
-
-
-        function getStoredLibraries() {
-          const raw = localStorage.getItem(LIB_STORAGE_KEY);
-          return raw ? JSON.parse(raw) : [];
-        }
-
-        function saveLibraries(libs) {
-          localStorage.setItem(LIB_STORAGE_KEY, JSON.stringify(libs));
-        }
-
-        async function loadOnlineLibraries() {
-          const container = document.getElementById("onlineLibraries");
-          container.innerHTML = "";
+          async function loadOnlineLibraries() {
+            const container = document.getElementById("onlineLibraries");
+            container.innerHTML = "";
 
             const userLibs = getStoredLibraries();
             const urls = [...SYSTEM_LIBRARIES, ...userLibs];
@@ -229,139 +264,158 @@
               return;
             }
 
-          for (const url of urls) {
-            const { books, name } = await loadLibrary(url);
+            for (const url of urls) {
+              const { books, name } = await loadLibrary(url);
 
-            const section = document.createElement("section");
-            section.className = "online-library";
+              const section = document.createElement("section");
+              section.className = "online-library";
 
-            const header = document.createElement("div");
-            header.style.display = "flex";
-            header.style.justifyContent = "space-between";
-            header.style.alignItems = "center";
+              const header = document.createElement("div");
+              header.style.display = "flex";
+              header.style.justifyContent = "space-between";
+              header.style.alignItems = "center";
 
-            const title = document.createElement("h3");
-            title.textContent = name || (new URL(url)).pathname.split('/').pop() || url;
+              const title = document.createElement("h3");
+              const filename = new URL(url).pathname.split("/").pop() || url;
+              const cleanedName = filename.replace(
+                /\.(uylib|library)?\.?json$/i,
+                ""
+              );
+              title.textContent = name || cleanedName;
 
-            const removeBtn = document.createElement("button");
-            removeBtn.textContent = "🗑️ Delete";
-            removeBtn.style.marginLeft = "1em";
-            removeBtn.onclick = () => {
-              if (confirm(`Do you really want to delete library "${title.textContent}" ?`)) {
-                const current = getStoredLibraries().filter(l => l !== url);
-                saveLibraries(current);
-                loadOnlineLibraries();
+              const removeBtn = document.createElement("button");
+              removeBtn.textContent = "🗑️ Delete";
+              removeBtn.style.marginLeft = "1em";
+              removeBtn.onclick = () => {
+                if (
+                  confirm(
+                    `Do you really want to delete library "${title.textContent}" ?`
+                  )
+                ) {
+                  const current = getStoredLibraries().filter((l) => l !== url);
+                  saveLibraries(current);
+                  loadOnlineLibraries();
+                }
+              };
+
+              header.appendChild(title);
+              header.appendChild(removeBtn);
+              section.appendChild(header);
+
+              if (books.length === 0) {
+                section.appendChild(
+                  document.createTextNode("No books found in this library.")
+                );
+              } else {
+                books.forEach((book) => {
+                  const card = document.createElement("div");
+                  card.className = "book-card";
+
+                  card.innerHTML = `
+                    <div style="display:flex;gap:1em;align-items:flex-start;">
+                      ${
+                        book["cover-link"]
+                          ? `<img src="${book["cover-link"]}" alt="cover" style="width:100px;height:auto;border:1px solid #ccc;border-radius:4px;">`
+                          : ""
+                      }
+                      <div>
+                        <h4>${book.title}</h4>
+                        <p><strong>Author:</strong> ${
+                          book.author || "Unknown"
+                        }</p>
+                        <button class="downloadOnline">Download</button>
+                        </div>
+                        </div>
+                        `;
+
+                  card.querySelector(".downloadOnline").onclick = async () => {
+                    try {
+                      const res = await fetch(book["content-link"]);
+                      const content = await res.text();
+
+                      try {
+                        parseBookFile(content);
+                      } catch (e) {
+                        alert(`❌ Invalid .uybook format: ${e.message}`);
+                        return;
+                      }
+
+                      const id = book.title + "_" + Date.now();
+                      await addBook(db, id, content);
+                      const allBooks = await getAllBooks(db);
+                      displayBooks(allBooks);
+                      alert(`✅ "${book.title}" added to your library!`);
+                    } catch (e) {
+                      alert(
+                        `❌ Failed to download book: ${book.title}\n> ${e}`
+                      );
+                    }
+                  };
+
+                  section.appendChild(card);
+                });
               }
-            };
 
-            header.appendChild(title);
-            header.appendChild(removeBtn);
-            section.appendChild(header);
+              container.appendChild(section);
+            }
+          }
 
+          async function loadLibrary(url, depth = 0) {
+            if (visited.has(url)) return { books: [], name: null };
+            visited.add(url);
 
-            if (books.length === 0) {
-              section.appendChild(document.createTextNode("No books found in this library."));
-            } else {
-              books.forEach(book => {
-                const card = document.createElement("div");
-                card.className = "book-card";
+            try {
+              const res = await fetch(url);
+              const items = await res.json();
 
-                card.innerHTML = `
-                  <div style="display:flex;gap:1em;align-items:flex-start;">
-                    ${book["cover-link"] ? `<img src="${book["cover-link"]}" alt="cover" style="width:100px;height:auto;border:1px solid #ccc;border-radius:4px;">` : ''}
-                    <div>
-                      <h4>${book.title}</h4>
-                      <p><strong>Author:</strong> ${book.author || "Unknown"}</p>
-                      <button class="downloadOnline">Download</button>
-                    </div>
-                  </div>
-                `;
+              let books = [];
+              let name = null;
 
-                card.querySelector(".downloadOnline").onclick = async () => {
-                  try {
-                    const res = await fetch(book["content-link"]);
-                    const content = await res.text();
-                    const id = book.title + "_" + Date.now();
-                    await addBook(db, id, content);
-                    const allBooks = await getAllBooks(db);
-                    displayBooks(allBooks);
-                    alert(`✅ "${book.title}" added to your library!`);
-                  } catch (e) {
-                    alert(`❌ Failed to download book: ${book.title}`);
-                  }
-                };
+              for (const item of items) {
+                if (item.type === "library" && item.url) {
+                  const nested = await loadLibrary(item.url, depth + 1);
+                  books.push(...nested.books);
+                } else if (
+                  item.title &&
+                  item["cover-link"] &&
+                  item["content-link"]
+                ) {
+                  books.push(item);
+                }
 
-                section.appendChild(card);
-              });
+                // Trouve le nom si présent dans un item type "meta"
+                if (!name && item.type === "meta" && item.name) {
+                  name = item.name;
+                }
+              }
+
+              return { books, name };
+            } catch (e) {
+              console.error("Erreur de chargement de la bibliothèque:", url);
+              return { books: [], name: null };
+            }
+          }
+
+          // Ajout dynamique de nouvelle URL
+          document.getElementById("addLibraryBtn").onclick = () => {
+            const input = document.getElementById("newLibUrl");
+            const url = input.value.trim();
+            if (!url) return;
+
+            const current = getStoredLibraries();
+            if (!current.includes(url)) {
+              current.push(url);
+              saveLibraries(current);
+              loadOnlineLibraries();
             }
 
-            container.appendChild(section);
-          }
-        }
+            input.value = "";
+          };
 
-
-        async function loadLibrary(url, depth = 0) {
-          if (visited.has(url)) return { books: [], name: null };
-          visited.add(url);
-
-          try {
-            const res = await fetch(url);
-            const items = await res.json();
-
-            let books = [];
-            let name = null;
-
-            for (const item of items) {
-              if (item.type === "library" && item.url) {
-                const nested = await loadLibrary(item.url, depth + 1);
-                books.push(...nested.books);
-              } else if (item.title && item["cover-link"] && item["content-link"]) {
-                books.push(item);
-              }
-
-              // Trouve le nom si présent dans un item type "meta"
-              if (!name && item.type === "meta" && item.name) {
-                name = item.name;
-              }
-            }
-
-            return { books, name };
-          } catch (e) {
-            console.error("Erreur de chargement de la bibliothèque:", url);
-            return { books: [], name: null };
-          }
-        }
-
-        // Ajout dynamique de nouvelle URL
-        document.getElementById("addLibraryBtn").onclick = () => {
-          const input = document.getElementById("newLibUrl");
-          const url = input.value.trim();
-          if (!url) return;
-
-          const current = getStoredLibraries();
-          if (!current.includes(url)) {
-            current.push(url);
-            saveLibraries(current);
-            loadOnlineLibraries();
-          }
-
-          input.value = "";
-        };
-
-        async function showStorageEstimate() {
-          if ('storage' in navigator && 'estimate' in navigator.storage) {
-            const { usage, quota } = await navigator.storage.estimate();
-            const usedMB = (usage / 1024 / 1024).toFixed(2);
-            const quotaMB = (quota / 1024 / 1024).toFixed(2);
-            const percent = ((usage / quota) * 100).toFixed(1);
-            document.getElementById("storageUsage").textContent =
-            `💾 Storage used: ${usedMB} MB / ${quotaMB} MB (${percent}%)`;
-          }
-        }
-
-        await showStorageEstimate();
-        await loadOnlineLibraries();
-      })();
-    </script>
+          await showStorageEstimate();
+          await loadOnlineLibraries();
+        })();
+      </script>
+    </div>
   </body>
 </html>
