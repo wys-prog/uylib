@@ -1,3 +1,8 @@
+function cleanHtml(html) {
+  // Supprime les espaces/sauts de ligne entre les balises (ex: <div>\n  <div> → <div><div>)
+  return html.replace(/>\s+</g, '><');
+}
+
 export function parseBookFile(raw) {
   const metaMatch = raw.match(/\.meta:([\s\S]*?);/);
   const bytesMatch = raw.match(/\.bytes:\[(.+?)\];/s); // note le ? pour non-greedy
@@ -8,7 +13,7 @@ export function parseBookFile(raw) {
   if (!metaMatch || !bytesMatch) throw new Error('Format invalide');
 
   const metaRaw = metaMatch[1];
-  const html = bytesMatch[1];
+  const html = decode(bytesMatch[1]);
 
   const meta = {};
   const regex = /@([\w\d_]+):'(.*?)'(?:,|$)/gs;
@@ -54,7 +59,7 @@ export function buildBookRaw(meta, html) {
   }
 
   const metaPart = `.meta:${metaEntries.join(',')};`;
-  const htmlPart = `.bytes:[${html}];`;
+  const htmlPart = `.bytes:[${encode(cleanHtml(html))}];`;
 
   let raw = `${metaPart}\n${htmlPart}`;
   if (meta.cover) {
