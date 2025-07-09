@@ -1,6 +1,8 @@
 export function cleanHtml(html) {
   // Supprime les espaces/sauts de ligne entre les balises (ex: <div>\n  <div> → <div><div>)
-  return html.replace(/>\s+</g, '><').replace('\n', '');
+  wtf = html.replace(/>\s+</g, '><').replace('\n', '');
+  console.log(wtf)
+  return wtf
 }
 
 export function parseBookFile(raw) {

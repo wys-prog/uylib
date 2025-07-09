@@ -35,6 +35,11 @@
     HTML Content:
     <textarea id="content" placeholder="Paste your HTML here"></textarea>
   </label>
+  <label>
+    Upload HTML file:
+    <input type="file" id="htmlFile" accept=".html,.htm,text/html" />
+  </label>
+
 
   <label>
     Cover image:
@@ -48,11 +53,25 @@
   <script type="module">
     import { buildBookRaw, cleanHtml } from "./parse.js"
 
+    function readFileAsText(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsText(file);
+      });
+    }
+
     document.getElementById('saveBtn').addEventListener('click', async () => {
       const title = document.getElementById('title').value.trim();
       const author = document.getElementById('author').value.trim();
       const description = document.getElementById('description').value.trim();
-      const content = document.getElementById('content').value.trim();
+      let content = document.getElementById('content').value.trim();
+      const htmlFile = document.getElementById('htmlFile').files[0];
+      if (htmlFile) {
+        content = await readFileAsText(htmlFile);
+      }
+
 
       if (!title || !author || !content) {
         alert('Title, author and HTML content are required.');

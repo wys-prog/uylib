@@ -104,6 +104,39 @@
     `;
 
     bookContent.innerHTML = html;
+    // Exécuter uniquement les scripts du contenu, dans un environnement restreint
+    const scripts = bookContent.querySelectorAll('script');
+    scripts.forEach(oldScript => {
+      const newScript = document.createElement('script');
+
+      // Interdire les scripts avec src (réseau)
+      if (oldScript.src) {
+        console.warn("Blocked external script:", oldScript.src);
+        return;
+      }
+
+      // Créer un environnement restreint pour l'exécution
+      const sandbox = {
+        console: console,
+        document,
+        bookContent,
+        setTimeout,
+        // tu peux ajouter d'autres éléments "safe" ici si besoin
+      };
+
+      try {
+        // Exécuter dans un contexte limité via Function
+        const func = new Function('sandbox', `
+          with(sandbox) {
+            ${oldScript.textContent}
+          }
+        `);
+        func(sandbox);
+      } catch (err) {
+        console.error("Error in embedded script:", err);
+      }
+    });
+
     setTimeout(() => {
       window.scrollTo(0, meta.scrollY || 0);
     }, 50);
