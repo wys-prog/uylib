@@ -69,9 +69,11 @@
             const tx = db.transaction("books", "readwrite");
             const store = tx.objectStore("books");
             store.put({ id, raw: rawContent, addedAt: Date.now() });
-            tx.oncomplete = () => resolve();
+            tx.oncomplete = () => {
+              showStorageEstimate();
+              resolve();
+            };
             tx.onerror = () => reject(tx.error);
-            showStorageEstimate();
           });
         }
 
@@ -90,9 +92,11 @@
             const tx = db.transaction("books", "readwrite");
             const store = tx.objectStore("books");
             store.clear();
-            tx.oncomplete = () => resolve();
+            tx.oncomplete = () => {
+              showStorageEstimate();
+              resolve();
+            };
             tx.onerror = () => reject(tx.error);
-            showStorageEstimate();
           });
         }
 
@@ -107,34 +111,33 @@
           books.sort((a, b) => b.addedAt - a.addedAt);
 
           books.forEach((book) => {
-            //const { meta } = parseBookFile(book.raw);
             let meta;
             try {
               ({ meta } = parseBookFile(book.raw));
             } catch (e) {
               console.warn("⚠️ Error parsing book", book.id, e);
-              return; // ignore ce livre, ou tu peux afficher un message d’erreur à l’utilisateur
+              return;
             }
             const card = document.createElement("div");
             card.className = "book-card";
 
             card.innerHTML = `
-          <div style="display:flex;gap:1em;align-items:flex-start;">
-            ${
-              meta.cover
-                ? `<img src="${meta.cover}" alt="cover" style="width:150px;height:auto;object-fit:cover;border:1px solid #ccc;border-radius:4px;">`
-                : ""
-            }
-            <div style="flex-grow:1;">
-              <h2>${meta.title || "(Untitled)"}</h2>
-              <p><strong>Author:</strong> ${meta.author || "Unknown"}</p>
-              <p>${meta.description || ""}</p>
-              <button class="viewBtn">View</button>
-              <button class="download">Download</button>
-              <button class="deleteBtn" style="color:red;">Delete</button> <!-- Bouton supprimer ajouté -->
-              </div>
-              </div>
-              `;
+      <div style="display:flex;gap:1em;align-items:flex-start;">
+        ${
+          meta.cover
+            ? `<img src="${meta.cover}" alt="cover" style="width:150px;height:auto;object-fit:cover;border:1px solid #ccc;border-radius:4px;">`
+            : ""
+        }
+        <div style="flex-grow:1;">
+          <h2>${meta.title || "(Untitled)"}</h2>
+          <p><strong>Author:</strong> ${meta.author || "Unknown"}</p>
+          <p>${meta.description || ""}</p>
+          <button class="viewBtn">View</button>
+          <button class="download">Download</button>
+          <button class="deleteBtn" style="color:red;">Delete</button>
+        </div>
+      </div>
+    `;
 
             card.querySelector(".viewBtn").onclick = () => {
               sessionStorage.setItem("currentBook", book.raw);
@@ -152,7 +155,6 @@
               URL.revokeObjectURL(url);
             };
 
-            // Nouveau : supprimer un seul livre
             card.querySelector(".deleteBtn").onclick = async () => {
               if (confirm(`Delete "${meta.title || "this book"}"?`)) {
                 const tx = db.transaction("books", "readwrite");
@@ -162,9 +164,7 @@
                   const allBooks = await getAllBooks(db);
                   displayBooks(allBooks);
                 };
-                tx.onerror = () => {
-                  alert("Failed to delete the book.");
-                };
+                tx.onerror = () => alert("Failed to delete the book.");
               }
             };
 
@@ -215,7 +215,7 @@
             let data;
             try {
               data = JSON.parse(text);
-            } catch (e) {
+            } catch {
               alert("Invalid JSON file");
               return;
             }
@@ -265,7 +265,7 @@
             }
 
             for (const url of urls) {
-              const { books, name } = await loadLibrary(url);
+              const { books, name, infos } = await loadLibrary(url);
 
               const section = document.createElement("section");
               section.className = "online-library";
@@ -302,6 +302,24 @@
               header.appendChild(removeBtn);
               section.appendChild(header);
 
+              if (infos.length > 0) {
+                const infoDiv = document.createElement("div");
+                infoDiv.className = "library-info";
+                infoDiv.style.backgroundColor = "#f0f4f8";
+                infoDiv.style.padding = "0.5em 1em";
+                infoDiv.style.margin = "0.5em 0";
+                infoDiv.style.borderLeft = "4px solid #007acc";
+                infoDiv.style.color = "#004a99";
+
+                infos.forEach((msg) => {
+                  const p = document.createElement("p");
+                  p.textContent = msg;
+                  infoDiv.appendChild(p);
+                });
+
+                section.appendChild(infoDiv);
+              }
+
               if (books.length === 0) {
                 section.appendChild(
                   document.createTextNode("No books found in this library.")
@@ -312,21 +330,19 @@
                   card.className = "book-card";
 
                   card.innerHTML = `
-                    <div style="display:flex;gap:1em;align-items:flex-start;">
-                      ${
-                        book["cover-link"]
-                          ? `<img src="${book["cover-link"]}" alt="cover" style="width:100px;height:auto;border:1px solid #ccc;border-radius:4px;">`
-                          : ""
-                      }
-                      <div>
-                        <h4>${book.title}</h4>
-                        <p><strong>Author:</strong> ${
-                          book.author || "Unknown"
-                        }</p>
-                        <button class="downloadOnline">Download</button>
-                        </div>
-                        </div>
-                        `;
+            <div style="display:flex;gap:1em;align-items:flex-start;">
+              ${
+                book["cover-link"]
+                  ? `<img src="${book["cover-link"]}" alt="cover" style="width:100px;height:auto;border:1px solid #ccc;border-radius:4px;">`
+                  : ""
+              }
+              <div>
+                <h4>${book.title}</h4>
+                <p><strong>Author:</strong> ${book.author || "Unknown"}</p>
+                <button class="downloadOnline">Download</button>
+              </div>
+            </div>
+          `;
 
                   card.querySelector(".downloadOnline").onclick = async () => {
                     try {
@@ -361,7 +377,7 @@
           }
 
           async function loadLibrary(url, depth = 0) {
-            if (visited.has(url)) return { books: [], name: null };
+            if (visited.has(url)) return { books: [], name: null, infos: [] };
             visited.add(url);
 
             try {
@@ -370,33 +386,35 @@
 
               let books = [];
               let name = null;
+              let infos = [];
 
               for (const item of items) {
                 if (item.type === "library" && item.url) {
                   const nested = await loadLibrary(item.url, depth + 1);
                   books.push(...nested.books);
+                  infos.push(...nested.infos);
                 } else if (
                   item.title &&
                   item["cover-link"] &&
                   item["content-link"]
                 ) {
                   books.push(item);
+                } else if (item.type === "info" && item.what) {
+                  infos.push(item.what);
                 }
 
-                // Trouve le nom si présent dans un item type "meta"
                 if (!name && item.type === "meta" && item.name) {
                   name = item.name;
                 }
               }
 
-              return { books, name };
+              return { books, name, infos };
             } catch (e) {
-              console.error("Erreur de chargement de la bibliothèque:", url);
-              return { books: [], name: null };
+              console.error("Erreur de chargement de la bibliothèque:", url, e);
+              return { books: [], name: null, infos: [] };
             }
           }
 
-          // Ajout dynamique de nouvelle URL
           document.getElementById("addLibraryBtn").onclick = () => {
             const input = document.getElementById("newLibUrl");
             const url = input.value.trim();

@@ -173,3 +173,13 @@ input:focus, textarea:focus {
   background-color: #1b4a56;
   box-shadow: 0 3px 10px rgba(27, 74, 86, 0.9);
 }
+
+.library-info {
+  font-style: italic;
+  font-size: 0.9em;
+  color: #004a99;
+  background-color: #f0f4f8;
+  padding: 0.5em 1em;
+  margin: 0.5em 0;
+  border-left: 4px solid #007acc;
+}
