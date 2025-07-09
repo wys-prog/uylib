@@ -1,276 +1,301 @@
 <!DOCTYPE html>
 <html>
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta charset="utf-8" />
-  <title>UYBook Reader</title>
-  <link rel="stylesheet" href="style.css" />
-  <link href="https://fonts.googleapis.com/css2?family=Amiri&family=Scheherazade+New&display=swap" rel="stylesheet" />
-  <style>
-    body {
-      margin: 0;
-      font-family: 'Amiri', 'Scheherazade New', serif;
-      background: #f7f3e9;
-      color: #1a1a1a;
-    }
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta charset="utf-8" />
+    <title>UYBook Reader</title>
+    <link rel="stylesheet" href="style.css" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Amiri&family=Scheherazade+New&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        margin: 0;
+        font-family: "Amiri", "Scheherazade New", serif;
+        background: #f7f3e9;
+        color: #1a1a1a;
+      }
 
-    @media (max-width: 600px) {
       #toolbar {
+        position: fixed; /* ← assure qu’il reste en haut */
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 1000;
+        background: white;
+        display: flex;
+        flex-direction: row;
         flex-wrap: nowrap;
         overflow-x: auto;
-        gap: 0.3rem;
+        overflow-y: hidden;
+        gap: 0.5rem;
         padding: 0.5rem;
-      }
-
-      #toolbar button,
-      #toolbar input[type="search"] {
-        font-size: 0.9rem;
-        padding: 0.3rem 0.5rem;
         white-space: nowrap;
-        flex: 0 0 auto;
+        scrollbar-width: none; /* Firefox */
+        -ms-overflow-style: none; /* IE 10+ */
       }
 
-      #searchBox {
-        min-width: 120px;
+      #toolbar::-webkit-scrollbar {
+        display: none; /* Chrome, Safari */
       }
 
-      body {
-        padding-top: 70px;
+      #toolbar > * {
+        flex: 0 0 auto; /* ← empêche de prendre toute la largeur */
+        white-space: nowrap;
+        font-size: 0.9rem;
+        padding: 0.4rem 0.8rem;
+        width: auto !important; /* ← override des `width: 100%` potentiels */
+        min-width: fit-content;
+      }
+
+      #bookMeta {
+        text-align: center; /* ← centrer le titre, auteur, description */
+        margin-bottom: 2rem;
       }
 
       #contentWrapper {
-        margin-top: 90px;
-        padding: 1rem;
+        margin-top: 80px;
+        max-width: 900px;
+        padding: 2rem 1rem;
+        margin-left: auto;
+        margin-right: auto;
       }
-    }
+      p {
+        font-size: 1.1rem; /* ← more appropriate for mobile readability */
+        line-height: 1.6; /* ← tighter line spacing */
+      }
 
+      h1,
+      h2,
+      h3 {
+        font-size: 1.3rem; /* ← scale down heading font sizes */
+        margin-top: 1.2em;
+      }
 
-    #toolbar {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      background: white;
-      padding: 10px;
-      border-bottom: 1px solid #ccc;
-      z-index: 1000;
-      display: flex;
-      justify-content: left; /* ← aligner les boutons à gauche */
-      gap: 0.5rem; /* ← petit espace entre les boutons */
-      flex-wrap: wrap;
-      flex-direction: row;
-    }
+      img {
+        max-width: 100%;
+        height: auto;
+        display: block;
+        margin: 1em auto;
+      }
+      ::selection {
+        background: #cde8e0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="toolbar">
+      <button id="editMeta" title="Edit metadata">⋮</button>
+      <button id="highlight">Highlight</button>
+      <button id="addNote">Add Note</button>
+      <button id="saveMeta">💾 Save</button>
+      <button id="unhighlight">Unhighlight</button>
+      <button id="showNotes">Show Notes</button>
+      <button onclick="window.location.href='index.html'">← Back</button>
+    </div>
 
-    #bookMeta {
-      text-align: center;           /* ← centrer le titre, auteur, description */
-      margin-bottom: 2rem;
-    }
+    <div id="contentWrapper">
+      <div id="bookMeta"></div>
+      <div id="bookContent"></div>
+    </div>
 
-    #contentWrapper {
-      margin-top: 80px;
-      max-width: 900px;
-      padding: 2rem 1rem;
-      margin-left: auto;
-      margin-right: auto;
-    }
-    h1, h2, h3 {
-      color: #264653;
-      font-family: 'Amiri', serif;
-      margin-top: 2em;
-    }
-    p {
-      margin: 1.2em 0;
-      line-height: 1.8;
-      font-size: 1.4rem;
-    }
-    img {
-      max-width: 100%;
-      height: auto;
-      display: block;
-      margin: 1em auto;
-    }
-    ::selection {
-      background: #cde8e0;
-    }
-  </style>
-</head>
-<body>
-  <div id="toolbar">
-    <button id="editMeta" title="Edit metadata">⋮</button>
-    <button id="highlight">Highlight</button>
-    <button id="addNote">Add Note</button>
-    <button id="saveMeta">💾 Save</button>
-    <button id="unhighlight">Unhighlight</button>
-    <button id="showNotes">Show Notes</button>
-    <input type="search" id="searchBox" placeholder="🔍 Search..." style="margin-left: auto;" />
-    <button onclick="window.location.href='index.html'">← Back</button>
-  </div>
+    <script type="module">
+      import { parseBookFile, buildBookRaw } from "./parse.js";
+      import { openDB } from "./common.js";
 
-  <div id="contentWrapper">
-    <div id="bookMeta"></div>
-    <div id="bookContent"></div>
-  </div>
+      const bookId = sessionStorage.getItem("currentBookId");
+      if (!bookId) {
+        document.body.innerHTML = "<p>Error: No book selected.</p>";
+        window.location.href = "./index.html"
+        throw new Error("No book ID");
+      }
 
-  <script type="module">
-    import { parseBookFile, buildBookRaw } from './parse.js';
-    import { openDB } from './common.js';
+      const db = await openDB();
+      const tx = db.transaction("books", "readonly");
+      const store = tx.objectStore("books");
+      const req = store.get(bookId);
 
-    const raw = sessionStorage.getItem('currentBook');
-    const bookId = sessionStorage.getItem('currentBookId');
-    if (!raw || !bookId) {
-      document.body.innerHTML = '<p>Error: No book loaded.</p>';
-      throw new Error('No book');
-    }
+      req.onsuccess = () => {
+        const book = req.result;
+        if (!book || !book.raw) {
+          document.body.innerHTML = "<p>Error: Book not found in database.</p>";
+          return;
+        }
 
-    const { meta, html } = parseBookFile(raw);
-    meta.highlights = meta.highlights || [];
-    meta.notes = meta.notes || [];
+        const { meta, html } = parseBookFile(book.raw);
+        meta.highlights = meta.highlights || [];
+        meta.notes = meta.notes || [];
 
-    const bookMeta = document.getElementById('bookMeta');
-    const bookContent = document.getElementById('bookContent');
+        const bookMeta = document.getElementById("bookMeta");
+        const bookContent = document.getElementById("bookContent");
 
-    bookMeta.innerHTML = `
-      <h2>${meta.title || '(Untitled)'}</h2>
-      <p><strong>Author:</strong> ${meta.author || 'Unknown'}</p>
-      <p>${meta.description || ''}</p>
+        bookMeta.innerHTML = `
+      <h2>${meta.title || "(Untitled)"}</h2>
+      <p><strong>Author:</strong> ${meta.author || "Unknown"}</p>
+      <p>${meta.description || ""}</p>
     `;
 
-    bookContent.innerHTML = html;
-    // Exécuter uniquement les scripts du contenu, dans un environnement restreint
-    const scripts = bookContent.querySelectorAll('script');
-    scripts.forEach(oldScript => {
-      const newScript = document.createElement('script');
+        bookContent.innerHTML = html;
 
-      // Interdire les scripts avec src (réseau)
-      if (oldScript.src) {
-        console.warn("Blocked external script:", oldScript.src);
-        return;
-      }
-
-      // Créer un environnement restreint pour l'exécution
-      const sandbox = {
-        console: console,
-        document,
-        bookContent,
-        setTimeout,
-        // tu peux ajouter d'autres éléments "safe" ici si besoin
-      };
-
-      try {
-        // Exécuter dans un contexte limité via Function
-        const func = new Function('sandbox', `
+        // Exécuter les scripts intégrés du contenu
+        const scripts = bookContent.querySelectorAll("script");
+        scripts.forEach((oldScript) => {
+          const newScript = document.createElement("script");
+          if (oldScript.src) {
+            console.warn("Blocked external script:", oldScript.src);
+            return;
+          }
+          const sandbox = { console, document, bookContent, setTimeout };
+          try {
+            const func = new Function(
+              "sandbox",
+              `
           with(sandbox) {
             ${oldScript.textContent}
           }
-        `);
-        func(sandbox);
-      } catch (err) {
-        console.error("Error in embedded script:", err);
-      }
-    });
+        `
+            );
+            func(sandbox);
+          } catch (err) {
+            console.error("Error in embedded script:", err);
+          }
+        });
 
-    setTimeout(() => {
-      window.scrollTo(0, meta.scrollY || 0);
-    }, 50);
+        setTimeout(() => {
+          window.scrollTo(0, meta.scrollY || 0);
+        }, 50);
 
-    document.getElementById('highlight').onclick = () => {
-      const sel = window.getSelection();
-      if (sel.isCollapsed) return alert("Empty selection");
-      const range = sel.getRangeAt(0);
-      const span = document.createElement("span");
-      span.style.backgroundColor = "yellow";
-      span.dataset.highlightId = Date.now();
-      range.surroundContents(span);
-      meta.highlights.push({ id: span.dataset.highlightId, text: sel.toString(), scrollY: window.scrollY });
-      sel.removeAllRanges();
-    };
+        document.getElementById("highlight").onclick = () => {
+          const sel = window.getSelection();
+          if (sel.isCollapsed) return alert("Empty selection");
+          const range = sel.getRangeAt(0);
+          const span = document.createElement("span");
+          span.style.backgroundColor = "yellow";
+          span.dataset.highlightId = Date.now();
+          range.surroundContents(span);
+          meta.highlights.push({
+            id: span.dataset.highlightId,
+            text: sel.toString(),
+            scrollY: window.scrollY,
+          });
+          sel.removeAllRanges();
+        };
 
-    document.getElementById('addNote').onclick = () => {
-      const sel = window.getSelection();
-      if (sel.isCollapsed) return alert("Empty selection");
-      const note = prompt("Write your note:");
-      if (!note) return;
-      const range = sel.getRangeAt(0);
-      const span = document.createElement("span");
-      span.style.backgroundColor = "lightblue";
-      span.title = note;
-      span.dataset.noteId = Date.now();
-      range.surroundContents(span);
-      meta.notes.push({ id: span.dataset.noteId, text: sel.toString(), note, scrollY: window.scrollY });
-      sel.removeAllRanges();
-    };
+        document.getElementById("addNote").onclick = () => {
+          const sel = window.getSelection();
+          if (sel.isCollapsed) return alert("Empty selection");
+          const note = prompt("Write your note:");
+          if (!note) return;
+          const range = sel.getRangeAt(0);
+          const span = document.createElement("span");
+          span.style.backgroundColor = "lightblue";
+          span.title = note;
+          span.dataset.noteId = Date.now();
+          range.surroundContents(span);
+          meta.notes.push({
+            id: span.dataset.noteId,
+            text: sel.toString(),
+            note,
+            scrollY: window.scrollY,
+          });
+          sel.removeAllRanges();
+        };
 
-    document.getElementById('unhighlight').onclick = () => {
-      const sel = window.getSelection();
-      if (sel.isCollapsed) return alert("Empty selection");
-      const range = sel.getRangeAt(0);
-      const container = range.commonAncestorContainer;
-      const highlightsToRemove = [];
+        document.getElementById("unhighlight").onclick = () => {
+          const sel = window.getSelection();
+          if (sel.isCollapsed) return alert("Empty selection");
+          const range = sel.getRangeAt(0);
+          const container = range.commonAncestorContainer;
+          const highlightsToRemove = [];
 
-      function findHighlights(node) {
-        if (node.nodeType === 1 && node.dataset.highlightId) {
-          const nodeRange = document.createRange();
-          nodeRange.selectNodeContents(node);
-          if (
-            range.compareBoundaryPoints(Range.END_TO_START, nodeRange) < 0 &&
-            range.compareBoundaryPoints(Range.START_TO_END, nodeRange) > 0
-          ) highlightsToRemove.push(node);
+          function findHighlights(node) {
+            if (node.nodeType === 1 && node.dataset.highlightId) {
+              const nodeRange = document.createRange();
+              nodeRange.selectNodeContents(node);
+              if (
+                range.compareBoundaryPoints(Range.END_TO_START, nodeRange) <
+                  0 &&
+                range.compareBoundaryPoints(Range.START_TO_END, nodeRange) > 0
+              )
+                highlightsToRemove.push(node);
+            }
+            node.childNodes?.forEach?.(findHighlights);
+          }
+
+          findHighlights(container);
+          if (!highlightsToRemove.length)
+            return alert("No highlights found in selection");
+          highlightsToRemove.forEach((span) => {
+            const parent = span.parentNode;
+            while (span.firstChild) parent.insertBefore(span.firstChild, span);
+            parent.removeChild(span);
+            const index = meta.highlights.findIndex(
+              (h) => h.id === span.dataset.highlightId
+            );
+            if (index !== -1) meta.highlights.splice(index, 1);
+          });
+          sel.removeAllRanges();
+          alert("Highlight(s) removed");
+        };
+
+        document.getElementById("showNotes").onclick = () => {
+          if (!meta.notes?.length) return alert("No notes found.");
+          let message = "Notes:\n\n";
+          meta.notes.forEach((note) => {
+            message += `• "${note.text}"\n  → ${note.note}\n\n`;
+          });
+          alert(message);
+        };
+
+        document.getElementById("saveMeta").onclick = async () => {
+          meta.scrollY = window.scrollY;
+          const newRaw = buildBookRaw(meta, bookContent.innerHTML);
+          const db = await openDB();
+          const tx = db.transaction("books", "readwrite");
+          tx.objectStore("books").put({
+            id: bookId,
+            raw: newRaw,
+            addedAt: Date.now(),
+          });
+          tx.oncomplete = () => alert("Saved!");
+          tx.onerror = () => alert("Error while saving");
+        };
+
+        window.addEventListener("beforeunload", async () => {
+          try {
+            meta.scrollY = window.scrollY;
+            const newRaw = buildBookRaw(meta, bookContent.innerHTML);
+            const db = await openDB();
+            const tx = db.transaction("books", "readwrite");
+            tx.objectStore("books").put({
+              id: bookId,
+              raw: newRaw,
+              addedAt: Date.now(),
+            });
+          } catch (err) {
+            console.warn("Auto-save failed", err);
+          }
+        });
+
+        // Tu peux ignorer le searchBox si tu ne l’as pas dans la page
+        const searchBox = document.getElementById("searchBox");
+        if (searchBox) {
+          searchBox.oninput = (e) => {
+            const query = e.target.value.toLowerCase();
+            const paragraphs = bookContent.querySelectorAll("p, h1, h2, h3");
+            paragraphs.forEach((p) => {
+              const text = p.textContent.toLowerCase();
+              p.style.backgroundColor = text.includes(query) ? "#ffffcc" : "";
+            });
+          };
         }
-        node.childNodes?.forEach?.(findHighlights);
-      }
+      };
 
-      findHighlights(container);
-      if (!highlightsToRemove.length) return alert("No highlights found in selection");
-      highlightsToRemove.forEach(span => {
-        const parent = span.parentNode;
-        while (span.firstChild) parent.insertBefore(span.firstChild, span);
-        parent.removeChild(span);
-        const index = meta.highlights.findIndex(h => h.id === span.dataset.highlightId);
-        if (index !== -1) meta.highlights.splice(index, 1);
-      });
-      sel.removeAllRanges();
-      alert("Highlight(s) removed");
-    };
-
-    document.getElementById('showNotes').onclick = () => {
-      if (!meta.notes?.length) return alert("No notes found.");
-      let message = "Notes:\n\n";
-      meta.notes.forEach(note => {
-        message += `• "${note.text}"\n  → ${note.note}\n\n`;
-      });
-      alert(message);
-    };
-
-    document.getElementById('saveMeta').onclick = async () => {
-      meta.scrollY = window.scrollY;
-      const newRaw = buildBookRaw(meta, bookContent.innerHTML);
-      const db = await openDB();
-      const tx = db.transaction('books', 'readwrite');
-      tx.objectStore('books').put({ id: bookId, raw: newRaw, addedAt: Date.now() });
-      tx.oncomplete = () => alert('Saved!');
-      tx.onerror = () => alert('Error while saving');
-    };
-
-    window.addEventListener('beforeunload', async () => {
-      try {
-        meta.scrollY = window.scrollY;
-        const newRaw = buildBookRaw(meta, bookContent.innerHTML);
-        const db = await openDB();
-        const tx = db.transaction('books', 'readwrite');
-        tx.objectStore('books').put({ id: bookId, raw: newRaw, addedAt: Date.now() });
-      } catch (err) {
-        console.warn("Auto-save failed", err);
-      }
-    });
-
-    document.getElementById("searchBox").oninput = (e) => {
-      const query = e.target.value.toLowerCase();
-      const paragraphs = bookContent.querySelectorAll("p, h1, h2, h3");
-      paragraphs.forEach(p => {
-        const text = p.textContent.toLowerCase();
-        p.style.backgroundColor = text.includes(query) ? "#ffffcc" : "";
-      });
-    };
-  </script>
-</body>
+      req.onerror = () => {
+        document.body.innerHTML =
+          "<p>Error: Failed to read from IndexedDB.</p>";
+      };
+    </script>
+  </body>
 </html>

@@ -79,6 +79,7 @@
       <button onclick="addCustomFont()">Add Font</button>
       <button onclick="exportBook()">💾 Export</button>
       <button onclick="importBook()">📂 Import</button>
+      <button onclick="importHTML()">🌐 Import HTML</button>
     </div>
   </header>
 
@@ -181,6 +182,25 @@
       };
       input.click();
     }
+
+    function importHTML() {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.html,.htm';
+      input.onchange = e => {
+        const file = e.target.files[0];
+        const reader = new FileReader();
+        reader.onload = () => {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(reader.result, 'text/html');
+          const bodyContent = doc.body.innerHTML;
+          editorEl.innerHTML += bodyContent; // ← append after existing content
+        };
+        reader.readAsText(file);
+      };
+      input.click();
+    }
+
   </script>
 </body>
 </html>

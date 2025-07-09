@@ -141,8 +141,7 @@
     `;
 
             card.querySelector(".viewBtn").onclick = () => {
-              sessionStorage.setItem("currentBook", book.raw);
-              sessionStorage.setItem("currentBookId", book.id);
+              sessionStorage.setItem("currentBookId", book.id); // seulement l'ID
               window.location.href = "reader.html";
             };
 
