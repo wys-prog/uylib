@@ -22,7 +22,7 @@
         top: 0;
         left: 0;
         right: 0;
-        z-index: 1000;
+        z-index: 10000;
         background: white;
         display: flex;
         flex-direction: row;
@@ -55,9 +55,7 @@
       }
 
       #contentWrapper {
-        margin-top: 80px;
         max-width: 900px;
-        padding: 2rem 1rem;
         margin-left: auto;
         margin-right: auto;
       }
@@ -107,7 +105,7 @@
       const bookId = sessionStorage.getItem("currentBookId");
       if (!bookId) {
         document.body.innerHTML = "<p>Error: No book selected.</p>";
-        window.location.href = "./index.html"
+        window.location.href = "./index.html";
         throw new Error("No book ID");
       }
 
@@ -137,8 +135,11 @@
     `;
 
         bookContent.innerHTML = html;
+        const toolbar = document.getElementById("toolbar");
+        const contentWrapper = document.getElementById("contentWrapper");
+        const toolbarHeight = toolbar.offsetHeight;
+        contentWrapper.style.paddingTop = `${toolbarHeight + 20}px`;
 
-        // Exécuter les scripts intégrés du contenu
         const scripts = bookContent.querySelectorAll("script");
         scripts.forEach((oldScript) => {
           const newScript = document.createElement("script");
@@ -226,6 +227,7 @@
           findHighlights(container);
           if (!highlightsToRemove.length)
             return alert("No highlights found in selection");
+
           highlightsToRemove.forEach((span) => {
             const parent = span.parentNode;
             while (span.firstChild) parent.insertBefore(span.firstChild, span);
@@ -233,8 +235,10 @@
             const index = meta.highlights.findIndex(
               (h) => h.id === span.dataset.highlightId
             );
+          
             if (index !== -1) meta.highlights.splice(index, 1);
           });
+
           sel.removeAllRanges();
           alert("Highlight(s) removed");
         };
